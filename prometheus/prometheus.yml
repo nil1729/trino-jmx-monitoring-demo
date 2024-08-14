@@ -28,10 +28,53 @@ scrape_configs:
     static_configs:
       - targets: ["prometheus:9090"]
 
-  - job_name: "trino-jmx"
+  # - job_name: "trino-jmx"
+  #   metrics_path: "/metrics"
+  #   scrape_interval: 5s
+  #   static_configs:
+  #     - targets: ["trino-coordinator:12345"]
+  #       labels:
+  #         instance: "trino-coordinator"
+
+  - job_name: "trino"
     metrics_path: "/metrics"
     scrape_interval: 5s
-    static_configs:
-      - targets: ["trino-coordinator:12345"]
-        labels:
-          instance: "trino-coordinator"
+    dns_sd_configs:
+      - names:
+          - trino-worker  # goes here
+        type: A
+        port: 12345
+      - names:
+          - trino-coordinator  # goes here
+        type: A
+        port: 12345
+    relabel_configs:
+      - source_labels: [__meta_dns_name,__address__]
+        separator: ":"
+        target_label: instance
+        # regex: "[^;]+"
+        # replacement: "${1}:${2}:12345"
+
+  - job_name: "trino-docker"
+    metrics_path: "/metrics"
+    scrape_interval: 5s
+    docker_sd_configs:
+      - host: "unix:///var/run/docker.sock"
+        port: 12345
+        filters:
+          - name: "label"
+            values: ["trino=true"]  # Filter containers by a specific label
+    relabel_configs:
+      - source_labels: [__meta_docker_port_private]
+        regex: "12345"
+        action: "keep"
+      - source_labels: [__meta_docker_container_name]
+        regex: '/(.*)'
+        target_label: 'instance'
+      #   target_label: instance
+      #   regex: "/(.+)"
+      #   replacement: "${1}"  # Use container name as instance label
+      # - source_labels: [__address__]
+      #   target_label: __address__
+      #   regex: "(.+):.+"
+      #   replacement: "${1}:12345"

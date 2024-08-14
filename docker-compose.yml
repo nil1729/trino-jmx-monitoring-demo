@@ -32,9 +32,15 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    labels:
+      trino: true
+      trino-worker: false
+      trino-coordinator: true
 
   trino-worker:
-    image: trinodb/trino:433
+    build:
+      context: dockerfiles
+      dockerfile: Dockerfile.trino
     deploy:
       replicas: 2
       resources:
@@ -43,8 +49,14 @@ services:
           memory: ${TRINO_WORKER_MEMORY}
     volumes:
       - "${PWD}/worker/config.properties:/etc/trino/config.properties"
+      - "${PWD}/coordinator/jvm.config:/etc/trino/jvm.config"
+      - "${PWD}/coordinator/jmx.config.yaml:/etc/trino/jmx/config.yaml"
     networks:
       trino-internal:
+    expose:
+      - "12345"
+      - "8080"
+      - "9080"
     healthcheck:
       test:
         [
@@ -55,8 +67,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    labels:
+      trino: true
+      trino-worker: true
+      trino-coordinator: false
 
   prometheus:
+    user: root
     image: prom/prometheus:v2.50.0 # fix version to avoid breaking changes in future releases
     container_name: prometheus
     hostname: prometheus
@@ -66,6 +83,7 @@ services:
     volumes:
       - "${PWD}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml"
       - prometheus-data:/prometheus
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
     networks:
@@ -78,7 +96,7 @@ services:
     hostname: grafana
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "8000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
       - GF_SECURITY_ADMIN_USER=${GRAFANA_USER}
